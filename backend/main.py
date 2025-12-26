@@ -17,7 +17,7 @@ GROQ_MODEL = "llama-3.1-8b-instant"
 # Ensure these are set in your .env file
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "http://localhost:8000/auth/callback"
+REDIRECT_URI = "http://inboxintelligence.onrender.com/auth/callback"
 FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
 
 app = FastAPI(title="Inbox Intelligence Backend")
