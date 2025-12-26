@@ -9,10 +9,6 @@ from groq import Groq
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- SETUP & CONFIG ---
-# Allow HTTP for local testing (Remove this line in production/HTTPS)
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,7 +18,7 @@ GROQ_MODEL = "llama-3.1-8b-instant"
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "http://localhost:8000/auth/callback"
-FRONTEND_URL = "http://localhost:8501"
+FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
 
 app = FastAPI(title="Inbox Intelligence Backend")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
