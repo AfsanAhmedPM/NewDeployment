@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # --- CONFIG ---
 GROQ_MODEL = "llama-3.1-8b-instant"
-CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+CLIENT_ID = 115872799324-4l50npg996d4n3gd2ca958fkgf21pa6i.apps.googleusercontent.com
+CLIENT_SECRET = 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
 REDIRECT_URI = "https://inboxintelligence.onrender.com/auth/callback"
 FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
 
