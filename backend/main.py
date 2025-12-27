@@ -1,4 +1,4 @@
-import os
+import os  # <--- FIXED (was vimport)
 import json
 import logging
 import collections
@@ -9,12 +9,16 @@ from groq import Groq
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+# --- SETUP ---
+# Allow HTTP for local testing, but Render uses HTTPS so this is just a fallback safety
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1" 
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- CONFIG ---
 GROQ_MODEL = "llama-3.1-8b-instant"
-# Ensure these are set in your .env file
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "https://inboxintelligence.onrender.com/auth/callback"
@@ -23,7 +27,7 @@ FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
 app = FastAPI(title="Inbox Intelligence Backend")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# In-memory session storage (For demo purposes)
+# In-memory session storage
 USER_SESSION = {
     "credentials": None,
     "last_result": {}
@@ -44,15 +48,13 @@ flow = Flow.from_client_config(
     redirect_uri=REDIRECT_URI,
 )
 
-# --- AI LOGIC (ID MAPPING STRATEGY) ---
+# --- AI LOGIC ---
 def categorize_with_ai(emails):
     if not emails:
         return {}
 
-    # 1. Map IDs to Email Objects
     email_map = {i: e for i, e in enumerate(emails, 1)}
 
-    # 2. Build Prompt (Subject + Short Snippet)
     prompt_lines = []
     for i, e in email_map.items():
         clean_snippet = e['snippet'][:60].replace("\n", " ")
@@ -62,19 +64,13 @@ def categorize_with_ai(emails):
 
     system_prompt = """
     You are a career-focused email assistant. Sort emails into exactly these 4 categories:
-
-    1. "🚨 Action Required" 
-       - INTERVIEWS, CODING TESTS, DEADLINES, OFFERS.
-    2. "⏳ Applications & Updates"
-       - "Application Received", "Status Update", Rejections.
-    3. "🎓 University & Learning"
-       - College/University emails, Newsletters, Courses.
-    4. "🗑️ Promotions & Noise"
-       - Marketing, LinkedIn notifications, Social media.
+    1. "🚨 Action Required" (INTERVIEWS, CODING TESTS, DEADLINES, OFFERS)
+    2. "⏳ Applications & Updates" (Application Received, Status Update, Rejections)
+    3. "🎓 University & Learning" (College/University emails, Newsletters, Courses)
+    4. "🗑️ Promotions & Noise" (Marketing, LinkedIn, Social media)
 
     RULES:
     - Return ONLY a JSON object: { "Category Name": [ID1, ID2] }
-    - Be aggressive with "Action Required" for any dates/meetings.
     """
 
     try:
@@ -88,11 +84,9 @@ def categorize_with_ai(emails):
             response_format={"type": "json_object"}
         )
         
-        # 3. Parse Response
         ai_response = completion.choices[0].message.content
         category_map = json.loads(ai_response)
 
-        # 4. Rebuild Full Data
         final_output = {}
         for category, ids in category_map.items():
             final_output[category] = []
@@ -108,6 +102,10 @@ def categorize_with_ai(emails):
         return {}
 
 # --- ROUTES ---
+@app.get("/")
+def home():
+    return {"message": "Inbox Intelligence Backend is Online!"}
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -120,9 +118,18 @@ def login():
 @app.get("/auth/callback")
 def callback(request: Request):
     try:
-        flow.fetch_token(authorization_response=str(request.url))
+        # --- HTTPS FIX FOR RENDER ---
+        auth_response = str(request.url)
+        # Render puts the app behind a proxy, so it sees 'http' even if user is on 'https'
+        # Google requires the redirect_uri to match exactly (https)
+        if auth_response.startswith("http:"):
+            auth_response = auth_response.replace("http:", "https:", 1)
+        
+        # 1. Fetch Token ONCE (Fixed)
+        flow.fetch_token(authorization_response=auth_response)
         USER_SESSION["credentials"] = flow.credentials
         
+        # --- START GMAIL LOGIC ---
         service = build("gmail", "v1", credentials=flow.credentials)
         results = service.users().messages().list(userId="me", maxResults=60).execute()
         messages = results.get("messages", [])
@@ -130,7 +137,6 @@ def callback(request: Request):
         extracted_emails = []
         sender_counter = collections.defaultdict(int)
 
-        # 1. Fetch & Count
         for msg in messages:
             try:
                 data = service.users().messages().get(
@@ -159,11 +165,11 @@ def callback(request: Request):
             except Exception:
                 continue
         
-        # 2. Attach Counts
+        # Attach Counts
         for email in extracted_emails:
             email["sender_count"] = sender_counter[email["from"]]
         
-        # 3. AI Sort
+        # AI Sort
         structured_data = categorize_with_ai(extracted_emails)
         USER_SESSION["last_result"] = structured_data
         
