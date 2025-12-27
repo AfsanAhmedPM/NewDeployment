@@ -1,4 +1,4 @@
-import os  # <--- FIXED (was vimport)
+import os
 import json
 import logging
 import collections
@@ -9,31 +9,27 @@ from groq import Groq
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- SETUP ---
-# Allow HTTP for local testing, but Render uses HTTPS so this is just a fallback safety
+# --- CONFIGURATION ---
+# 1. Allow HTTP for internal server communication (Render needs this)
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1" 
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- CONFIG ---
 GROQ_MODEL = "llama-3.1-8b-instant"
-CLIENT_ID = 115872799324-4l50npg996d4n3gd2ca958fkgf21pa6i.apps.googleusercontent.com
-CLIENT_SECRET = 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
+CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+
+# 2. CRITICAL: Must match your Google Console & Render URL exactly (No trailing slash)
 REDIRECT_URI = "https://inboxintelligence.onrender.com/auth/callback"
 FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
 
 app = FastAPI(title="Inbox Intelligence Backend")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# In-memory session storage
-USER_SESSION = {
-    "credentials": None,
-    "last_result": {}
-}
+USER_SESSION = { "credentials": None, "last_result": {} }
 
-# --- OAUTH FLOW ---
 flow = Flow.from_client_config(
     {
         "web": {
@@ -52,25 +48,23 @@ flow = Flow.from_client_config(
 def categorize_with_ai(emails):
     if not emails:
         return {}
-
+    
     email_map = {i: e for i, e in enumerate(emails, 1)}
-
     prompt_lines = []
     for i, e in email_map.items():
         clean_snippet = e['snippet'][:60].replace("\n", " ")
         prompt_lines.append(f"ID {i} | From: {e['from']} | Sub: {e['subject']} | Body: {clean_snippet}")
 
     prompt_text = "\n".join(prompt_lines)
-
+    
+    # 3. AI System Prompt
     system_prompt = """
     You are a career-focused email assistant. Sort emails into exactly these 4 categories:
-    1. "🚨 Action Required" (INTERVIEWS, CODING TESTS, DEADLINES, OFFERS)
-    2. "⏳ Applications & Updates" (Application Received, Status Update, Rejections)
-    3. "🎓 University & Learning" (College/University emails, Newsletters, Courses)
-    4. "🗑️ Promotions & Noise" (Marketing, LinkedIn, Social media)
-
-    RULES:
-    - Return ONLY a JSON object: { "Category Name": [ID1, ID2] }
+    1. "🚨 Action Required" (Interviews, Tests, Offers)
+    2. "⏳ Applications & Updates" (Received, Status, Rejection)
+    3. "🎓 University & Learning" (College, Courses)
+    4. "🗑️ Promotions & Noise" (Marketing, Social)
+    RULES: Return ONLY a JSON object: { "Category Name": [ID1, ID2] }
     """
 
     try:
@@ -83,7 +77,6 @@ def categorize_with_ai(emails):
             temperature=0.0,
             response_format={"type": "json_object"}
         )
-        
         ai_response = completion.choices[0].message.content
         category_map = json.loads(ai_response)
 
@@ -94,17 +87,15 @@ def categorize_with_ai(emails):
                 original = email_map.get(int(eid))
                 if original:
                     final_output[category].append(original)
-        
         return final_output
-
     except Exception as e:
-        logger.error(f"AI Processing Failed: {e}")
+        logger.error(f"AI Failed: {e}")
         return {}
 
 # --- ROUTES ---
 @app.get("/")
 def home():
-    return {"message": "Inbox Intelligence Backend is Online!"}
+    return {"message": "Inbox Intelligence Backend is Online"}
 
 @app.get("/health")
 def health():
@@ -118,18 +109,14 @@ def login():
 @app.get("/auth/callback")
 def callback(request: Request):
     try:
-        # --- HTTPS FIX FOR RENDER ---
+        # 4. CRITICAL FIX: Force HTTPS logic for Render
         auth_response = str(request.url)
-        # Render puts the app behind a proxy, so it sees 'http' even if user is on 'https'
-        # Google requires the redirect_uri to match exactly (https)
         if auth_response.startswith("http:"):
             auth_response = auth_response.replace("http:", "https:", 1)
         
-        # 1. Fetch Token ONCE (Fixed)
         flow.fetch_token(authorization_response=auth_response)
         USER_SESSION["credentials"] = flow.credentials
         
-        # --- START GMAIL LOGIC ---
         service = build("gmail", "v1", credentials=flow.credentials)
         results = service.users().messages().list(userId="me", maxResults=60).execute()
         messages = results.get("messages", [])
@@ -139,44 +126,29 @@ def callback(request: Request):
 
         for msg in messages:
             try:
-                data = service.users().messages().get(
-                    userId="me", id=msg["id"], format="metadata", metadataHeaders=["From", "Subject"]
-                ).execute()
+                data = service.users().messages().get(userId="me", id=msg["id"], format="metadata", metadataHeaders=["From", "Subject"]).execute()
+                snippet_res = service.users().messages().get(userId="me", id=msg["id"], format="minimal").execute()
                 
-                snippet_res = service.users().messages().get(
-                    userId="me", id=msg["id"], format="minimal"
-                ).execute()
+                subject = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "Subject"), "(No Subject)")
+                sender = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "From"), "Unknown")
                 
-                headers = data.get("payload", {}).get("headers", [])
-                subject = next((h["value"] for h in headers if h["name"] == "Subject"), "(No Subject)")
-                sender = next((h["value"] for h in headers if h["name"] == "From"), "Unknown")
-                snippet = snippet_res.get("snippet", "")
-                
-                # Simple Sender Name (Remove <email>)
                 sender_simple = sender.split("<")[0].strip().replace('"', '')
                 sender_counter[sender_simple] += 1
-
+                
                 extracted_emails.append({
-                    "id": msg["id"],
-                    "from": sender_simple,
-                    "subject": subject,
-                    "snippet": snippet
+                    "id": msg["id"], "from": sender_simple, "subject": subject, "snippet": snippet_res.get("snippet", "")
                 })
-            except Exception:
+            except:
                 continue
         
-        # Attach Counts
         for email in extracted_emails:
             email["sender_count"] = sender_counter[email["from"]]
-        
-        # AI Sort
-        structured_data = categorize_with_ai(extracted_emails)
-        USER_SESSION["last_result"] = structured_data
-        
+            
+        USER_SESSION["last_result"] = categorize_with_ai(extracted_emails)
         return RedirectResponse(FRONTEND_URL)
 
     except Exception as e:
-        logger.error(f"Callback Error: {e}")
+        logger.error(f"Error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/result")
