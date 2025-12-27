@@ -23,7 +23,7 @@ CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 # 2. CRITICAL: Must match your Google Console & Render URL exactly (No trailing slash)
 REDIRECT_URI = "https://inbox-intelligence.onrender.com/auth/callback"
-FRONTEND_URL = "https://inbox-intelligence.streamlit.app/"
+FRONTEND_URL = "https://inbox-intelligence.streamlit.app"
 
 app = FastAPI(title="Inbox Intelligence Backend")
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
