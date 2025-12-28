@@ -9,9 +9,6 @@ from groq import Groq
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- CONFIGURATION ---
-# 1. Allow HTTP for internal server communication (Render needs this)
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1" 
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
