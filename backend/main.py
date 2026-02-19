@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 GROQ_MODEL = "llama-3.1-8b-instant"
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://inbox-intelligence.onrender.com/auth/callback" # Update if needed
+REDIRECT_URI = "https://inboxintelligence-hwb1.onrender.com/auth/callback" # Update if needed
 FRONTEND_URL = "https://inbox-intelligence.streamlit.app"
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
