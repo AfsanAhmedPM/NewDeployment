@@ -301,8 +301,18 @@ def get_result(creds=Depends(get_current_user)):
 
     return {
         "status": "success",
-        "counts": counts,
-        "categories": categories,
+        "counts": {
+            "Action Items": len(messages),
+            "Applications": len(messages),
+            "University": len(messages),
+            "Promotions": len(messages)
+        },
+        "categories": {
+            "Action Items": extracted,
+            "Applications": extracted,
+            "University": extracted,
+            "Promotions": extracted
+        },
         "emails": extracted
     }
 
