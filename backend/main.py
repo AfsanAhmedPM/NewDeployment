@@ -301,18 +301,8 @@ def get_result(creds=Depends(get_current_user)):
 
     return {
         "status": "success",
-        "counts": {
-            "Action Items": len(messages),
-            "Applications": len(messages),
-            "University": len(messages),
-            "Promotions": len(messages)
-        },
-        "categories": {
-            "Action Items": extracted,
-            "Applications": extracted,
-            "University": extracted,
-            "Promotions": extracted
-        },
+        "counts": counts,
+        "categories": categories,
         "emails": extracted
     }
 
@@ -337,7 +327,7 @@ def generate_reply(request: GenerateRequest, creds = Depends(get_current_user)):
         USER INSTRUCTION: "{request.intent}"
         Task: Write a polite, concise email reply. Use the instruction. No placeholders.
         """
-        completion = client.chat.completions.create(model=GROQ_MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.7)
+        completion = client.chat.completions.create(model=MODEL_NAME, messages=[{"role": "user", "content": prompt}], temperature=0.7)
         return {"status": "success", "reply": completion.choices[0].message.content}
     except Exception as e: return JSONResponse({"error": str(e)}, status_code=500)
 
