@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-openai>=1.0.0
+groq
 python-dotenv
 google-auth
 google-auth-oauthlib
