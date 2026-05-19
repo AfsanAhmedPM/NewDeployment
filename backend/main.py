@@ -139,24 +139,52 @@ def login():
 @app.get("/auth/callback")
 def callback(request: Request, db: Session = Depends(get_db)):
     try:
-        auth_response = str(request.url).replace("http:", "https:", 1)
+        code = request.query_params.get("code")
+
+        if not code:
+            return JSONResponse(
+                {"error": "Missing authorization code"},
+                status_code=400,
+            )
+
         flow = create_flow()
-        flow.fetch_token(authorization_response=auth_response)
+
+        flow.fetch_token(code=code)
+
         creds = flow.credentials
+
         service = build("gmail", "v1", credentials=creds)
-        email = service.users().getProfile(userId="me").execute()["emailAddress"]
+
+        profile = service.users().getProfile(userId="me").execute()
+
+        email = profile["emailAddress"]
+
         new_token = str(uuid.uuid4())
-        
+
         user = db.query(User).filter(User.email == email).first()
+
         if not user:
-            user = User(email=email, credentials_json=creds.to_json(), session_token=new_token)
+            user = User(
+                email=email,
+                credentials_json=creds.to_json(),
+                session_token=new_token,
+            )
             db.add(user)
         else:
             user.credentials_json = creds.to_json()
             user.session_token = new_token
+
         db.commit()
+
         return RedirectResponse(f"{FRONTEND_URL}?token={new_token}")
-    except Exception as e: return JSONResponse({"error": str(e)}, status_code=500)
+
+    except Exception as e:
+        print("OAUTH ERROR:", str(e))
+
+        return JSONResponse(
+            {"error": str(e)},
+            status_code=500,
+        )
 
 @app.get("/result")
 def get_result(creds = Depends(get_current_user)):
