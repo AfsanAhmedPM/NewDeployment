@@ -53,7 +53,6 @@ def get_db():
 
 app = FastAPI()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # --- DATA MODELS ---
 class GenerateRequest(BaseModel):
