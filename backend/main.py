@@ -71,16 +71,26 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     creds_data = json.loads(user.credentials_json)
     return Credentials.from_authorized_user_info(creds_data)
 
-def create_flow():
+def create_flow(state=None):
     return Flow.from_client_config(
-        {"web": {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "redirect_uris": [REDIRECT_URI]}},
-        # ✅ UPDATED SCOPES: Added 'send' and 'compose'
+        {
+            "web": {
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [REDIRECT_URI],
+            }
+        },
         scopes=[
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
             "https://www.googleapis.com/auth/gmail.modify",
             "https://www.googleapis.com/auth/gmail.compose",
-            "https://www.googleapis.com/auth/gmail.send"
+            "https://www.googleapis.com/auth/gmail.send",
         ],
         redirect_uri=REDIRECT_URI,
+        state=state,
     )
 
 def create_message(to, subject, body_text):
@@ -117,8 +127,14 @@ def home(): return {"status": "Secretary Mode Online"}
 @app.get("/auth/login")
 def login():
     flow = create_flow()
-    auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
-    return RedirectResponse(auth_url)
+
+    authorization_url, state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+    )
+
+    return RedirectResponse(authorization_url)
 
 @app.get("/auth/callback")
 def callback(request: Request, db: Session = Depends(get_db)):
