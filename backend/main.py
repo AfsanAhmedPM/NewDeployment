@@ -290,20 +290,19 @@ def get_result(creds=Depends(get_current_user)):
 
     print("EXTRACTED EMAILS:", len(extracted))
 
+    categories = categorize_with_ai(extracted)
+
+    counts = {
+        "Action Items": len(categories.get("Action Items", [])),
+        "Applications": len(categories.get("Applications", [])),
+        "University": len(categories.get("University", [])),
+        "Promotions": len(categories.get("Promotions", [])),
+    }
+
     return {
         "status": "success",
-        "counts": {
-            "Action Items": len(extracted),
-            "Applications": 0,
-            "University": 0,
-            "Promotions": 0
-        },
-        "categories": {
-            "Action Items": extracted,
-            "Applications": [],
-            "University": [],
-            "Promotions": []
-        },
+        "counts": counts,
+        "categories": categories,
         "emails": extracted
     }
 
