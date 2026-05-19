@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import load_dotenv
-from openai import OpenAI
+from groq import Groq
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- CONFIG ---
-MODEL_NAME = "gpt-4o-mini"
+MODEL_NAME = "llama-3.1-8b-instant"
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "https://inboxintelligence-hwb1.onrender.com/auth/callback" # Update if needed
@@ -52,7 +52,7 @@ def get_db():
     finally: db.close()
 
 app = FastAPI()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # --- DATA MODELS ---
 class GenerateRequest(BaseModel):
