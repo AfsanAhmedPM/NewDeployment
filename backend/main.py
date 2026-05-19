@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer
 from dotenv import load_dotenv
-from groq import Groq
+from openai import OpenAI
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # --- CONFIG ---
-GROQ_MODEL = "llama-3.1-8b-instant"
+MODEL_NAME = "gpt-4o-mini"
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "https://inboxintelligence-hwb1.onrender.com/auth/callback" # Update if needed
@@ -52,7 +52,7 @@ def get_db():
     finally: db.close()
 
 app = FastAPI()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --- DATA MODELS ---
 class GenerateRequest(BaseModel):
@@ -149,7 +149,7 @@ def categorize_with_ai(emails):
 
     try:
         completion = client.chat.completions.create(
-            model=GROQ_MODEL,
+            model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": "\n".join(prompt_lines)}
