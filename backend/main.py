@@ -241,8 +241,6 @@ def get_result(creds=Depends(get_current_user)):
     results = service.users().messages().list(userId="me", maxResults=30).execute()
     messages = results.get("messages", [])
 
-    print("GMAIL MESSAGES FOUND:", len(messages))
-
     extracted = []
     sender_counter = collections.defaultdict(int)
 
@@ -261,17 +259,11 @@ def get_result(creds=Depends(get_current_user)):
                 format="minimal"
             ).execute().get("snippet", "")
 
-            sub = next(
-                (h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "Subject"),
-                "(No Subject)"
-            )
-            sender = next(
-                (h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "From"),
-                "Unknown"
-            )
+            sub = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "Subject"), "(No Subject)")
+            sender = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "From"), "Unknown")
             sender_simple = sender.split("<")[0].strip().replace('"', '')
-            sender_counter[sender_simple] += 1
 
+            sender_counter[sender_simple] += 1
             extracted.append({
                 "id": msg["id"],
                 "from": sender_simple,
@@ -287,19 +279,20 @@ def get_result(creds=Depends(get_current_user)):
 
     print("EXTRACTED EMAILS:", len(extracted))
 
-    categories = categorize_with_ai(extracted)
-
-    counts = {
-        "Action Items": len(categories.get("Action Items", [])),
-        "Applications": len(categories.get("Applications", [])),
-        "University": len(categories.get("University", [])),
-        "Promotions": len(categories.get("Promotions", [])),
-    }
-
     return {
         "status": "success",
-        "counts": counts,
-        "categories": categories,
+        "counts": {
+            "Action Items": len(extracted),
+            "Applications": 0,
+            "University": 0,
+            "Promotions": 0
+        },
+        "categories": {
+            "Action Items": extracted,
+            "Applications": [],
+            "University": [],
+            "Promotions": []
+        },
         "emails": extracted
     }
 
