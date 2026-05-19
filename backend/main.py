@@ -105,24 +105,66 @@ def create_message(to, subject, body_text):
 
 # --- AI LOGIC ---
 def categorize_with_ai(emails):
-    if not emails: return {}
-    prompt_lines = [f"ID {i} | From: {e['from']} | Sub: {e['subject']} | Body: {e['snippet'][:60]}" for i, e in enumerate(emails, 1)]
+    empty = {
+        "Action Items": [],
+        "Applications": [],
+        "University": [],
+        "Promotions": []
+    }
+
+    if not emails:
+        return empty
+
+    prompt_lines = [
+        f"ID {i} | From: {e['from']} | Sub: {e['subject']} | Body: {e['snippet'][:60]}"
+        for i, e in enumerate(emails, 1)
+    ]
+
     system_prompt = """
-    Sort emails into:
-    1. "🚨 Action Required" (Interviews, Tests, Offers)
-    2. "⏳ Applications & Updates" (Status, Rejection)
-    3. "🎓 University & Learning" (College, Courses)
-    4. "🗑️ Promotions & Noise" (Marketing, Social)
-    Return ONLY JSON: { "Category Name": [ID1, ID2] }
+    Sort emails into exactly these 4 groups:
+    1. Action Items
+    2. Applications
+    3. University
+    4. Promotions
+
+    Return ONLY JSON like:
+    {
+      "Action Items": [1, 3],
+      "Applications": [2],
+      "University": [],
+      "Promotions": [4]
+    }
     """
+
     try:
-        completion = client.chat.completions.create(model=GROQ_MODEL, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": "\n".join(prompt_lines)}], temperature=0.0, response_format={"type": "json_object"})
+        completion = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "\n".join(prompt_lines)}
+            ],
+            temperature=0.0,
+            response_format={"type": "json_object"}
+        )
+
+        print("GROQ RAW:", completion.choices[0].message.content)
+
         category_map = json.loads(completion.choices[0].message.content)
-        final_output = {}
+        final_output = {k: [] for k in empty.keys()}
+
         for cat, ids in category_map.items():
-            final_output[cat] = [emails[int(eid)-1] for eid in ids if int(eid)-1 < len(emails)]
+            if cat not in final_output:
+                continue
+            for eid in ids:
+                idx = int(eid) - 1
+                if 0 <= idx < len(emails):
+                    final_output[cat].append(emails[idx])
+
         return final_output
-    except: return {}
+
+    except Exception as e:
+        print("GROQ ERROR:", str(e))
+        return empty
 
 # --- ROUTES ---
 @app.get("/")
@@ -194,26 +236,72 @@ def callback(request: Request, db: Session = Depends(get_db)):
         )
 
 @app.get("/result")
-def get_result(creds = Depends(get_current_user)):
+def get_result(creds=Depends(get_current_user)):
     service = build("gmail", "v1", credentials=creds)
     results = service.users().messages().list(userId="me", maxResults=30).execute()
     messages = results.get("messages", [])
-    
+
+    print("GMAIL MESSAGES FOUND:", len(messages))
+
     extracted = []
     sender_counter = collections.defaultdict(int)
+
     for msg in messages:
         try:
-            data = service.users().messages().get(userId="me", id=msg["id"], format="metadata", metadataHeaders=["From", "Subject"]).execute()
-            snippet = service.users().messages().get(userId="me", id=msg["id"], format="minimal").execute().get("snippet", "")
-            sub = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "Subject"), "(No Subject)")
-            sender = next((h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "From"), "Unknown")
+            data = service.users().messages().get(
+                userId="me",
+                id=msg["id"],
+                format="metadata",
+                metadataHeaders=["From", "Subject"]
+            ).execute()
+
+            snippet = service.users().messages().get(
+                userId="me",
+                id=msg["id"],
+                format="minimal"
+            ).execute().get("snippet", "")
+
+            sub = next(
+                (h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "Subject"),
+                "(No Subject)"
+            )
+            sender = next(
+                (h["value"] for h in data.get("payload", {}).get("headers", []) if h["name"] == "From"),
+                "Unknown"
+            )
             sender_simple = sender.split("<")[0].strip().replace('"', '')
             sender_counter[sender_simple] += 1
-            extracted.append({"id": msg["id"], "from": sender_simple, "subject": sub, "snippet": snippet})
-        except: continue
-        
-    for e in extracted: e["sender_count"] = sender_counter[e["from"]]
-    return {"status": "success", "categories": categorize_with_ai(extracted)}
+
+            extracted.append({
+                "id": msg["id"],
+                "from": sender_simple,
+                "subject": sub,
+                "snippet": snippet
+            })
+        except Exception as e:
+            print("EMAIL EXTRACT ERROR:", e)
+            continue
+
+    for e in extracted:
+        e["sender_count"] = sender_counter[e["from"]]
+
+    print("EXTRACTED EMAILS:", len(extracted))
+
+    categories = categorize_with_ai(extracted)
+
+    counts = {
+        "Action Items": len(categories.get("Action Items", [])),
+        "Applications": len(categories.get("Applications", [])),
+        "University": len(categories.get("University", [])),
+        "Promotions": len(categories.get("Promotions", [])),
+    }
+
+    return {
+        "status": "success",
+        "counts": counts,
+        "categories": categories,
+        "emails": extracted
+    }
 
 @app.get("/action/trash/{msg_id}")
 def trash_email(msg_id: str, creds = Depends(get_current_user)):
