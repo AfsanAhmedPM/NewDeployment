@@ -65,9 +65,21 @@ class SendRequest(BaseModel):
     body: str
 
 # --- HELPERS ---
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    token = request.query_params.get("token")
+
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.lower().startswith("bearer "):
+            token = auth[7:]
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
     user = db.query(User).filter(User.session_token == token).first()
-    if not user: raise HTTPException(status_code=401, detail="Invalid Session")
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid Session")
+
     creds_data = json.loads(user.credentials_json)
     return Credentials.from_authorized_user_info(creds_data)
 
