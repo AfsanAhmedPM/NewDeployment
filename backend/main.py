@@ -71,8 +71,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     creds_data = json.loads(user.credentials_json)
     return Credentials.from_authorized_user_info(creds_data)
 
-def create_flow(state=None):
-    return Flow.from_client_config(
+def create_flow():
+    flow = Flow.from_client_config(
         {
             "web": {
                 "client_id": CLIENT_ID,
@@ -90,8 +90,12 @@ def create_flow(state=None):
             "https://www.googleapis.com/auth/gmail.send",
         ],
         redirect_uri=REDIRECT_URI,
-        state=state,
     )
+
+    # IMPORTANT
+    flow.autogenerate_code_verifier = False
+
+    return flow
 
 def create_message(to, subject, body_text):
     message = MIMEText(body_text)
@@ -149,7 +153,10 @@ def callback(request: Request, db: Session = Depends(get_db)):
 
         flow = create_flow()
 
-        flow.fetch_token(code=code)
+        flow.fetch_token(
+            code=code,
+            client_secret=CLIENT_SECRET
+        )
 
         creds = flow.credentials
 
